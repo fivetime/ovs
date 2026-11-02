@@ -1129,6 +1129,47 @@ OVSDB_CHECK_EXECUTION([weak references],
 [{"rows":[{"_uuid":["uuid","<3>"],"b":2,"b2a":["set",[]]},{"_uuid":["uuid","<4>"],"b":3,"b2a":["set",[]]}]}]
 ]])
 
+OVSDB_CHECK_EXECUTION([weak references - row changed before its target is deleted],
+  [weak_schema],
+  [[[["weak",
+      {"op": "insert",
+       "table": "a",
+       "row": {"a": 0,
+               "a2a1": ["named-uuid", "row0"],
+               "a2b": ["named-uuid", "row2"]},
+       "uuid-name": "row0"},
+      {"op": "insert",
+       "table": "a",
+       "row": {"a": 1,
+               "a2a1": ["named-uuid", "row1"],
+               "a2b": ["named-uuid", "row2"]},
+       "uuid-name": "row1"},
+      {"op": "insert",
+       "table": "b",
+       "row": {"b": 0,
+               "b2a": ["set", [["named-uuid", "row0"],
+                               ["named-uuid", "row1"]]]},
+       "uuid-name": "row2"}]]],
+   dnl The row of "b" is changed first, so it is the first one to be looked
+   dnl at, and its reference to the deleted row still has to go.
+   [[["weak",
+      {"op": "update",
+       "table": "b",
+       "where": [["b", "==", 0]],
+       "row": {"b": 1}},
+      {"op": "delete",
+       "table": "a",
+       "where": [["a", "==", 1]]}]]],
+   [[["weak",
+      {"op": "select",
+       "table": "b",
+       "where": [],
+       "columns": ["b", "b2a"]}]]]],
+  [[[{"uuid":["uuid","<0>"]},{"uuid":["uuid","<1>"]},{"uuid":["uuid","<2>"]}]
+[{"count":1},{"count":1}]
+[{"rows":[{"b":1,"b2a":["uuid","<0>"]}]}]
+]])
+
 OVSDB_CHECK_EXECUTION([immutable columns],
   [immutable_schema],
   [[[["immutable",

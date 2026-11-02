@@ -654,8 +654,13 @@ find_and_add_weak_refs(const struct ovsdb_row *src,
     }
 }
 
+/* Queues the weak references to a row deleted by 'txn' into the 'deleted_refs'
+ * lists of their source rows.  This has to happen for all the deleted rows
+ * before assess_weak_refs() looks at any source row, as it only processes a
+ * row once: a reference queued after that would stay in the row's datum. */
 static struct ovsdb_error * OVS_WARN_UNUSED_RESULT
-assess_weak_refs(struct ovsdb_txn *txn, struct ovsdb_txn_row *txn_row)
+assess_deleted_row_weak_refs(struct ovsdb_txn *txn,
+                             struct ovsdb_txn_row *txn_row)
 {
     struct ovsdb_weak_ref *weak;
     struct ovsdb_table *table = txn_row->table;
@@ -690,6 +695,17 @@ assess_weak_refs(struct ovsdb_txn *txn, struct ovsdb_txn_row *txn_row)
                                    &txn_row->deleted_refs, NULL, NULL);
         }
     }
+
+    return NULL;
+}
+
+static struct ovsdb_error * OVS_WARN_UNUSED_RESULT
+assess_weak_refs(struct ovsdb_txn *txn OVS_UNUSED,
+                 struct ovsdb_txn_row *txn_row)
+{
+    struct ovsdb_weak_ref *weak;
+    struct ovsdb_table *table = txn_row->table;
+    struct shash_node *node;
 
     if (!txn_row->new) {
         /* Since all the atoms will be destroyed by the ovsdb_row_destroy(),
@@ -1090,6 +1106,10 @@ ovsdb_txn_precommit(struct ovsdb_txn *txn)
 
     /* Check reference counts and remove bad references for "weak" referential
      * integrity. */
+    error = for_each_txn_row(txn, assess_deleted_row_weak_refs);
+    if (error) {
+        return error;
+    }
     error = for_each_txn_row(txn, assess_weak_refs);
     if (error) {
         return error;
